@@ -1,15 +1,27 @@
+import os
+
 import pymupdf
 import pytesseract
 from PIL import Image
 from docx import Document
 
 
-# Tell pytesseract where Tesseract is installed
-pytesseract.pytesseract.tesseract_cmd = (
-    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-)
+# ---------------------------------------------------------
+# TESSERACT CONFIGURATION
+# ---------------------------------------------------------
+# Windows: use the usual Tesseract installation path.
+# Linux/Streamlit Cloud: use the "tesseract" command.
+if os.name == "nt":
+    pytesseract.pytesseract.tesseract_cmd = (
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    )
+else:
+    pytesseract.pytesseract.tesseract_cmd = "tesseract"
 
 
+# ---------------------------------------------------------
+# PDF TEXT EXTRACTION
+# ---------------------------------------------------------
 def extract_pdf_text(file):
     """
     Extract text from a PDF resume.
@@ -18,30 +30,34 @@ def extract_pdf_text(file):
     If no usable text is found, uses OCR with Tesseract.
     """
 
-    # Open PDF from uploaded file
+    # Read uploaded PDF into memory
+    pdf_bytes = file.read()
+
+    # Open PDF
     document = pymupdf.open(
-        stream=file.read(),
+        stream=pdf_bytes,
         filetype="pdf"
     )
 
+    # -----------------------------------------------------
+    # FIRST ATTEMPT: NORMAL PDF TEXT EXTRACTION
+    # -----------------------------------------------------
     text = []
 
-    # First attempt: normal text extraction
     for page in document:
         page_text = page.get_text("text")
 
         if page_text and page_text.strip():
             text.append(page_text)
 
-    # If normal extraction worked, return the text
+    # If normal text extraction worked
     if text:
         document.close()
         return "\n".join(text)
 
-    # -------------------------------------------------
-    # OCR FALLBACK
-    # -------------------------------------------------
-
+    # -----------------------------------------------------
+    # SECOND ATTEMPT: OCR
+    # -----------------------------------------------------
     ocr_text = []
 
     for page in document:
@@ -51,7 +67,7 @@ def extract_pdf_text(file):
             matrix=pymupdf.Matrix(2, 2)
         )
 
-        # Convert image to PIL format
+        # Convert PyMuPDF image to PIL image
         image = Image.frombytes(
             "RGB",
             [pix.width, pix.height],
@@ -69,16 +85,23 @@ def extract_pdf_text(file):
     return "\n".join(ocr_text)
 
 
+# ---------------------------------------------------------
+# DOCX TEXT EXTRACTION
+# ---------------------------------------------------------
 def extract_docx_text(file):
     """
     Extract text from a DOCX resume.
+
+    Reads both normal paragraphs and tables.
     """
 
     document = Document(file)
 
     text = []
 
-    # Read normal paragraphs
+    # -----------------------------------------------------
+    # READ NORMAL PARAGRAPHS
+    # -----------------------------------------------------
     for paragraph in document.paragraphs:
 
         paragraph_text = paragraph.text.strip()
@@ -86,7 +109,9 @@ def extract_docx_text(file):
         if paragraph_text:
             text.append(paragraph_text)
 
-    # Read tables
+    # -----------------------------------------------------
+    # READ TABLES
+    # -----------------------------------------------------
     for table in document.tables:
 
         for row in table.rows:
@@ -106,25 +131,30 @@ def extract_docx_text(file):
     return "\n".join(text)
 
 
+# ---------------------------------------------------------
+# MAIN RESUME TEXT EXTRACTION FUNCTION
+# ---------------------------------------------------------
 def extract_resume_text(file):
     """
     Detect the resume file type and extract its text.
 
-    Supports PDF and DOCX files.
+    Supported formats:
+    - PDF
+    - DOCX
     """
 
     file_name = file.name.lower()
 
+    # PDF
     if file_name.endswith(".pdf"):
-
         return extract_pdf_text(file)
 
+    # DOCX
     elif file_name.endswith(".docx"):
-
         return extract_docx_text(file)
 
+    # Unsupported file
     else:
-
         raise ValueError(
             "Unsupported file format. "
             "Please upload a PDF or DOCX resume."
