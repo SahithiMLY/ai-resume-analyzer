@@ -1,4 +1,5 @@
 import os
+import shutil
 
 import pymupdf
 import pytesseract
@@ -6,28 +7,32 @@ from PIL import Image
 from docx import Document
 
 
-# ---------------------------------------------------------
+# =========================================================
 # TESSERACT CONFIGURATION
-# ---------------------------------------------------------
-# Windows: use the usual Tesseract installation path.
-# Linux/Streamlit Cloud: use the "tesseract" command.
+# =========================================================
+
+# On Windows, use the installed Tesseract path.
+# On Linux/Streamlit Cloud, look for the tesseract command.
 if os.name == "nt":
-    pytesseract.pytesseract.tesseract_cmd = (
-        r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    )
+    windows_tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+    if os.path.exists(windows_tesseract_path):
+        pytesseract.pytesseract.tesseract_cmd = windows_tesseract_path
 else:
-    pytesseract.pytesseract.tesseract_cmd = "tesseract"
+    if shutil.which("tesseract"):
+        pytesseract.pytesseract.tesseract_cmd = "tesseract"
 
 
-# ---------------------------------------------------------
+# =========================================================
 # PDF TEXT EXTRACTION
-# ---------------------------------------------------------
+# =========================================================
+
 def extract_pdf_text(file):
     """
     Extract text from a PDF resume.
 
-    First tries normal PDF text extraction.
-    If no usable text is found, uses OCR with Tesseract.
+    First attempts normal PDF text extraction.
+    If no usable text is found, attempts OCR using Tesseract.
     """
 
     # Read uploaded PDF into memory
@@ -42,6 +47,7 @@ def extract_pdf_text(file):
     # -----------------------------------------------------
     # FIRST ATTEMPT: NORMAL PDF TEXT EXTRACTION
     # -----------------------------------------------------
+
     text = []
 
     for page in document:
@@ -50,7 +56,7 @@ def extract_pdf_text(file):
         if page_text and page_text.strip():
             text.append(page_text)
 
-    # If normal text extraction worked
+    # If normal extraction worked, return the text
     if text:
         document.close()
         return "\n".join(text)
@@ -58,6 +64,25 @@ def extract_pdf_text(file):
     # -----------------------------------------------------
     # SECOND ATTEMPT: OCR
     # -----------------------------------------------------
+
+    # Check whether Tesseract is available
+    tesseract_available = shutil.which("tesseract")
+
+    if os.name == "nt":
+        windows_tesseract_path = (
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+        )
+
+        tesseract_available = os.path.exists(
+            windows_tesseract_path
+        )
+
+    # If Tesseract is not installed, return empty text
+    # instead of crashing the application.
+    if not tesseract_available:
+        document.close()
+        return ""
+
     ocr_text = []
 
     for page in document:
@@ -85,9 +110,10 @@ def extract_pdf_text(file):
     return "\n".join(ocr_text)
 
 
-# ---------------------------------------------------------
+# =========================================================
 # DOCX TEXT EXTRACTION
-# ---------------------------------------------------------
+# =========================================================
+
 def extract_docx_text(file):
     """
     Extract text from a DOCX resume.
@@ -102,6 +128,7 @@ def extract_docx_text(file):
     # -----------------------------------------------------
     # READ NORMAL PARAGRAPHS
     # -----------------------------------------------------
+
     for paragraph in document.paragraphs:
 
         paragraph_text = paragraph.text.strip()
@@ -112,6 +139,7 @@ def extract_docx_text(file):
     # -----------------------------------------------------
     # READ TABLES
     # -----------------------------------------------------
+
     for table in document.tables:
 
         for row in table.rows:
@@ -131,29 +159,39 @@ def extract_docx_text(file):
     return "\n".join(text)
 
 
-# ---------------------------------------------------------
+# =========================================================
 # MAIN RESUME TEXT EXTRACTION FUNCTION
-# ---------------------------------------------------------
+# =========================================================
+
 def extract_resume_text(file):
     """
     Detect the resume file type and extract its text.
 
     Supported formats:
-    - PDF
-    - DOCX
+        PDF
+        DOCX
     """
 
     file_name = file.name.lower()
 
+    # -----------------------------------------------------
     # PDF
+    # -----------------------------------------------------
+
     if file_name.endswith(".pdf"):
         return extract_pdf_text(file)
 
+    # -----------------------------------------------------
     # DOCX
+    # -----------------------------------------------------
+
     elif file_name.endswith(".docx"):
         return extract_docx_text(file)
 
-    # Unsupported file
+    # -----------------------------------------------------
+    # UNSUPPORTED FILE
+    # -----------------------------------------------------
+
     else:
         raise ValueError(
             "Unsupported file format. "
