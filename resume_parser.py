@@ -11,14 +11,19 @@ from docx import Document
 # TESSERACT CONFIGURATION
 # =========================================================
 
-# On Windows, use the installed Tesseract path.
-# On Linux/Streamlit Cloud, look for the tesseract command.
 if os.name == "nt":
-    windows_tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    # Windows
+    windows_tesseract_path = (
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    )
 
     if os.path.exists(windows_tesseract_path):
-        pytesseract.pytesseract.tesseract_cmd = windows_tesseract_path
+        pytesseract.pytesseract.tesseract_cmd = (
+            windows_tesseract_path
+        )
+
 else:
+    # Linux / Streamlit Cloud
     if shutil.which("tesseract"):
         pytesseract.pytesseract.tesseract_cmd = "tesseract"
 
@@ -35,10 +40,8 @@ def extract_pdf_text(file):
     If no usable text is found, attempts OCR using Tesseract.
     """
 
-    # Read uploaded PDF into memory
     pdf_bytes = file.read()
 
-    # Open PDF
     document = pymupdf.open(
         stream=pdf_bytes,
         filetype="pdf"
@@ -56,7 +59,6 @@ def extract_pdf_text(file):
         if page_text and page_text.strip():
             text.append(page_text)
 
-    # If normal extraction worked, return the text
     if text:
         document.close()
         return "\n".join(text)
@@ -65,7 +67,6 @@ def extract_pdf_text(file):
     # SECOND ATTEMPT: OCR
     # -----------------------------------------------------
 
-    # Check whether Tesseract is available
     tesseract_available = shutil.which("tesseract")
 
     if os.name == "nt":
@@ -77,8 +78,6 @@ def extract_pdf_text(file):
             windows_tesseract_path
         )
 
-    # If Tesseract is not installed, return empty text
-    # instead of crashing the application.
     if not tesseract_available:
         document.close()
         return ""
@@ -87,19 +86,16 @@ def extract_pdf_text(file):
 
     for page in document:
 
-        # Render PDF page as an image
         pix = page.get_pixmap(
             matrix=pymupdf.Matrix(2, 2)
         )
 
-        # Convert PyMuPDF image to PIL image
         image = Image.frombytes(
             "RGB",
             [pix.width, pix.height],
             pix.samples
         )
 
-        # Perform OCR
         page_text = pytesseract.image_to_string(image)
 
         if page_text and page_text.strip():
@@ -117,7 +113,6 @@ def extract_pdf_text(file):
 def extract_docx_text(file):
     """
     Extract text from a DOCX resume.
-
     Reads both normal paragraphs and tables.
     """
 
