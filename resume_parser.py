@@ -1,5 +1,6 @@
 import os
 import shutil
+from io import BytesIO
 
 import pymupdf
 import pytesseract
@@ -40,8 +41,11 @@ def extract_pdf_text(file):
     If no usable text is found, attempts OCR using Tesseract.
     """
 
+    # Read uploaded PDF into memory
+
     pdf_bytes = file.read()
 
+    # Open PDF
     document = pymupdf.open(
         stream=pdf_bytes,
         filetype="pdf"
@@ -54,11 +58,13 @@ def extract_pdf_text(file):
     text = []
 
     for page in document:
+
         page_text = page.get_text("text")
 
         if page_text and page_text.strip():
             text.append(page_text)
 
+    # If normal extraction worked, return the text
     if text:
         document.close()
         return "\n".join(text)
@@ -69,7 +75,9 @@ def extract_pdf_text(file):
 
     tesseract_available = shutil.which("tesseract")
 
+    # Windows check
     if os.name == "nt":
+
         windows_tesseract_path = (
             r"C:\Program Files\Tesseract-OCR\tesseract.exe"
         )
@@ -78,25 +86,35 @@ def extract_pdf_text(file):
             windows_tesseract_path
         )
 
+    # If Tesseract is not installed, return empty text
     if not tesseract_available:
         document.close()
         return ""
+
+    # -----------------------------------------------------
+    # OCR EACH PDF PAGE
+    # -----------------------------------------------------
 
     ocr_text = []
 
     for page in document:
 
+        # Render PDF page as image
         pix = page.get_pixmap(
             matrix=pymupdf.Matrix(2, 2)
         )
 
+        # Convert PyMuPDF image to PIL image
         image = Image.frombytes(
             "RGB",
             [pix.width, pix.height],
             pix.samples
         )
 
-        page_text = pytesseract.image_to_string(image)
+        # Perform OCR
+        page_text = pytesseract.image_to_string(
+            image
+        )
 
         if page_text and page_text.strip():
             ocr_text.append(page_text)
@@ -113,10 +131,21 @@ def extract_pdf_text(file):
 def extract_docx_text(file):
     """
     Extract text from a DOCX resume.
+
     Reads both normal paragraphs and tables.
     """
 
-    document = Document(file)
+    # -----------------------------------------------------
+    # READ UPLOADED DOCX INTO MEMORY
+    # -----------------------------------------------------
+
+    
+    docx_bytes = file.read()
+
+    # Open DOCX from memory
+    document = Document(
+        BytesIO(docx_bytes)
+    )
 
     text = []
 
@@ -149,7 +178,9 @@ def extract_docx_text(file):
                     row_text.append(cell_text)
 
             if row_text:
-                text.append(" | ".join(row_text))
+                text.append(
+                    " | ".join(row_text)
+                )
 
     return "\n".join(text)
 
@@ -174,6 +205,7 @@ def extract_resume_text(file):
     # -----------------------------------------------------
 
     if file_name.endswith(".pdf"):
+
         return extract_pdf_text(file)
 
     # -----------------------------------------------------
@@ -181,6 +213,7 @@ def extract_resume_text(file):
     # -----------------------------------------------------
 
     elif file_name.endswith(".docx"):
+
         return extract_docx_text(file)
 
     # -----------------------------------------------------
@@ -188,6 +221,7 @@ def extract_resume_text(file):
     # -----------------------------------------------------
 
     else:
+
         raise ValueError(
             "Unsupported file format. "
             "Please upload a PDF or DOCX resume."
