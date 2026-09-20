@@ -38,6 +38,7 @@ else:
 # =========================================================
 
 def extract_pdf_text(file):
+
     """
     Extract text from a PDF resume.
 
@@ -45,10 +46,8 @@ def extract_pdf_text(file):
     If no usable text is found, attempts OCR using Tesseract.
     """
 
-    # Read uploaded PDF into memory
     pdf_bytes = file.read()
 
-    # Open PDF
     document = pymupdf.open(
         stream=pdf_bytes,
         filetype="pdf"
@@ -65,10 +64,8 @@ def extract_pdf_text(file):
         page_text = page.get_text("text")
 
         if page_text and page_text.strip():
-
             text.append(page_text)
 
-    # If normal extraction worked
     if text:
 
         document.close()
@@ -81,7 +78,6 @@ def extract_pdf_text(file):
 
     tesseract_available = shutil.which("tesseract")
 
-    # Windows check
     if os.name == "nt":
 
         windows_tesseract_path = (
@@ -92,7 +88,6 @@ def extract_pdf_text(file):
             windows_tesseract_path
         )
 
-    # If Tesseract is not available
     if not tesseract_available:
 
         document.close()
@@ -107,25 +102,21 @@ def extract_pdf_text(file):
 
     for page in document:
 
-        # Render PDF page as image
         pix = page.get_pixmap(
             matrix=pymupdf.Matrix(2, 2)
         )
 
-        # Convert PyMuPDF image to PIL image
         image = Image.frombytes(
             "RGB",
             [pix.width, pix.height],
             pix.samples
         )
 
-        # Perform OCR
         page_text = pytesseract.image_to_string(
             image
         )
 
         if page_text and page_text.strip():
-
             ocr_text.append(page_text)
 
     document.close()
@@ -138,6 +129,7 @@ def extract_pdf_text(file):
 # =========================================================
 
 def extract_docx_text(file):
+
     """
     Extract text from a DOCX resume.
 
@@ -295,6 +287,7 @@ def extract_docx_text(file):
 # =========================================================
 
 def extract_resume_text(file):
+
     """
     Detect the resume file type and extract its text.
 
@@ -331,4 +324,3 @@ def extract_resume_text(file):
             "Unsupported file format. "
             "Please upload a PDF or DOCX resume."
         )
-# Updated for Streamlit deployment
