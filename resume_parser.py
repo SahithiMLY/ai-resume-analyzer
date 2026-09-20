@@ -331,3 +331,4 @@ def extract_resume_text(file):
             "Unsupported file format. "
             "Please upload a PDF or DOCX resume."
         )
+# Updated for Streamlit deployment
