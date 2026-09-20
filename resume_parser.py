@@ -22,7 +22,6 @@ if os.name == "nt":
     )
 
     if os.path.exists(windows_tesseract_path):
-
         pytesseract.pytesseract.tesseract_cmd = (
             windows_tesseract_path
         )
@@ -31,10 +30,7 @@ else:
 
     # Linux / Streamlit Cloud
     if shutil.which("tesseract"):
-
-        pytesseract.pytesseract.tesseract_cmd = (
-            "tesseract"
-        )
+        pytesseract.pytesseract.tesseract_cmd = "tesseract"
 
 
 # =========================================================
@@ -146,11 +142,11 @@ def extract_docx_text(file):
     Extract text from a DOCX resume.
 
     First uses python-docx to read:
-        - paragraphs
+        - normal paragraphs
         - tables
 
     If no text is found, falls back to reading
-    the DOCX document.xml file directly.
+    the DOCX XML directly.
     """
 
     # -----------------------------------------------------
@@ -241,10 +237,12 @@ def extract_docx_text(file):
             xml_data
         )
 
+        # Correct Microsoft Word XML namespace
         namespace = {
-            "w":
-            "http://schemas.openxmlformats.org/"
-            "wordprocessingml/2006/main"
+            "w": (
+                "http://schemas.openxmlformats.org/"
+                "wordprocessingml/2006/main"
+            )
         }
 
         xml_text = []
