@@ -1,5 +1,7 @@
 import os
 import shutil
+import zipfile
+import xml.etree.ElementTree as ET
 from io import BytesIO
 
 import pymupdf
@@ -13,20 +15,26 @@ from docx import Document
 # =========================================================
 
 if os.name == "nt":
+
     # Windows
     windows_tesseract_path = (
         r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     )
 
     if os.path.exists(windows_tesseract_path):
+
         pytesseract.pytesseract.tesseract_cmd = (
             windows_tesseract_path
         )
 
 else:
+
     # Linux / Streamlit Cloud
     if shutil.which("tesseract"):
-        pytesseract.pytesseract.tesseract_cmd = "tesseract"
+
+        pytesseract.pytesseract.tesseract_cmd = (
+            "tesseract"
+        )
 
 
 # =========================================================
@@ -42,7 +50,6 @@ def extract_pdf_text(file):
     """
 
     # Read uploaded PDF into memory
-
     pdf_bytes = file.read()
 
     # Open PDF
@@ -62,11 +69,14 @@ def extract_pdf_text(file):
         page_text = page.get_text("text")
 
         if page_text and page_text.strip():
+
             text.append(page_text)
 
-    # If normal extraction worked, return the text
+    # If normal extraction worked
     if text:
+
         document.close()
+
         return "\n".join(text)
 
     # -----------------------------------------------------
@@ -86,9 +96,11 @@ def extract_pdf_text(file):
             windows_tesseract_path
         )
 
-    # If Tesseract is not installed, return empty text
+    # If Tesseract is not available
     if not tesseract_available:
+
         document.close()
+
         return ""
 
     # -----------------------------------------------------
@@ -117,6 +129,7 @@ def extract_pdf_text(file):
         )
 
         if page_text and page_text.strip():
+
             ocr_text.append(page_text)
 
     document.close()
@@ -132,57 +145,151 @@ def extract_docx_text(file):
     """
     Extract text from a DOCX resume.
 
-    Reads both normal paragraphs and tables.
+    First uses python-docx to read:
+        - paragraphs
+        - tables
+
+    If no text is found, falls back to reading
+    the DOCX document.xml file directly.
     """
 
     # -----------------------------------------------------
     # READ UPLOADED DOCX INTO MEMORY
     # -----------------------------------------------------
 
-    
     docx_bytes = file.read()
-
-    # Open DOCX from memory
-    document = Document(
-        BytesIO(docx_bytes)
-    )
 
     text = []
 
     # -----------------------------------------------------
-    # READ NORMAL PARAGRAPHS
+    # FIRST METHOD: PYTHON-DOCX
     # -----------------------------------------------------
 
-    for paragraph in document.paragraphs:
+    try:
 
-        paragraph_text = paragraph.text.strip()
+        document = Document(
+            BytesIO(docx_bytes)
+        )
 
-        if paragraph_text:
-            text.append(paragraph_text)
+        # -------------------------------------------------
+        # READ NORMAL PARAGRAPHS
+        # -------------------------------------------------
 
-    # -----------------------------------------------------
-    # READ TABLES
-    # -----------------------------------------------------
+        for paragraph in document.paragraphs:
 
-    for table in document.tables:
+            paragraph_text = paragraph.text.strip()
 
-        for row in table.rows:
+            if paragraph_text:
 
-            row_text = []
-
-            for cell in row.cells:
-
-                cell_text = cell.text.strip()
-
-                if cell_text:
-                    row_text.append(cell_text)
-
-            if row_text:
                 text.append(
-                    " | ".join(row_text)
+                    paragraph_text
                 )
 
-    return "\n".join(text)
+        # -------------------------------------------------
+        # READ TABLES
+        # -------------------------------------------------
+
+        for table in document.tables:
+
+            for row in table.rows:
+
+                row_text = []
+
+                for cell in row.cells:
+
+                    cell_text = cell.text.strip()
+
+                    if cell_text:
+
+                        row_text.append(
+                            cell_text
+                        )
+
+                if row_text:
+
+                    text.append(
+                        " | ".join(row_text)
+                    )
+
+    except Exception:
+
+        text = []
+
+    # -----------------------------------------------------
+    # IF PYTHON-DOCX FOUND TEXT
+    # -----------------------------------------------------
+
+    if text:
+
+        return "\n".join(text)
+
+    # -----------------------------------------------------
+    # SECOND METHOD: DIRECT DOCX XML EXTRACTION
+    # -----------------------------------------------------
+
+    try:
+
+        with zipfile.ZipFile(
+            BytesIO(docx_bytes)
+        ) as docx_zip:
+
+            xml_data = docx_zip.read(
+                "word/document.xml"
+            )
+
+        root = ET.fromstring(
+            xml_data
+        )
+
+        namespace = {
+            "w":
+            "http://schemas.openxmlformats.org/"
+            "wordprocessingml/2006/main"
+        }
+
+        xml_text = []
+
+        # -------------------------------------------------
+        # READ EVERY PARAGRAPH FROM XML
+        # -------------------------------------------------
+
+        for paragraph in root.findall(
+            ".//w:p",
+            namespace
+        ):
+
+            words = []
+
+            for text_node in paragraph.findall(
+                ".//w:t",
+                namespace
+            ):
+
+                if text_node.text:
+
+                    words.append(
+                        text_node.text
+                    )
+
+            if words:
+
+                paragraph_text = "".join(
+                    words
+                ).strip()
+
+                if paragraph_text:
+
+                    xml_text.append(
+                        paragraph_text
+                    )
+
+        return "\n".join(
+            xml_text
+        )
+
+    except Exception:
+
+        return ""
 
 
 # =========================================================
