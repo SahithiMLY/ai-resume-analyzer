@@ -1,7 +1,6 @@
 import os
 import shutil
 import zipfile
-import xml.etree.ElementTree as ET
 from io import BytesIO
 
 import pymupdf
@@ -14,23 +13,32 @@ from docx import Document
 # TESSERACT CONFIGURATION
 # =========================================================
 
+WINDOWS_TESSERACT_PATH = (
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+)
+
 if os.name == "nt":
 
-    # Windows
-    windows_tesseract_path = (
-        r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    )
-
-    if os.path.exists(windows_tesseract_path):
+    if os.path.exists(WINDOWS_TESSERACT_PATH):
         pytesseract.pytesseract.tesseract_cmd = (
-            windows_tesseract_path
+            WINDOWS_TESSERACT_PATH
         )
 
 else:
 
-    # Linux / Streamlit Cloud
     if shutil.which("tesseract"):
         pytesseract.pytesseract.tesseract_cmd = "tesseract"
+
+
+def tesseract_available():
+    """Return True when Tesseract OCR is available."""
+
+    if os.name == "nt":
+        return os.path.exists(
+            WINDOWS_TESSERACT_PATH
+        )
+
+    return shutil.which("tesseract") is not None
 
 
 # =========================================================
@@ -40,10 +48,10 @@ else:
 def extract_pdf_text(file):
 
     """
-    Extract text from a PDF resume.
+    Extract text from a PDF.
 
     First attempts normal PDF text extraction.
-    If no usable text is found, attempts OCR using Tesseract.
+    If no usable text is found, OCR is used.
     """
 
     pdf_bytes = file.read()
@@ -54,7 +62,7 @@ def extract_pdf_text(file):
     )
 
     # -----------------------------------------------------
-    # FIRST ATTEMPT: NORMAL PDF TEXT EXTRACTION
+    # FIRST ATTEMPT: NORMAL PDF TEXT
     # -----------------------------------------------------
 
     text = []
@@ -76,27 +84,11 @@ def extract_pdf_text(file):
     # SECOND ATTEMPT: OCR
     # -----------------------------------------------------
 
-    tesseract_available = shutil.which("tesseract")
-
-    if os.name == "nt":
-
-        windows_tesseract_path = (
-            r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-        )
-
-        tesseract_available = os.path.exists(
-            windows_tesseract_path
-        )
-
-    if not tesseract_available:
+    if not tesseract_available():
 
         document.close()
 
         return ""
-
-    # -----------------------------------------------------
-    # OCR EACH PDF PAGE
-    # -----------------------------------------------------
 
     ocr_text = []
 
@@ -117,6 +109,7 @@ def extract_pdf_text(file):
         )
 
         if page_text and page_text.strip():
+
             ocr_text.append(page_text)
 
     document.close()
@@ -133,25 +126,24 @@ def extract_docx_text(file):
     """
     Extract text from a DOCX resume.
 
-    First uses python-docx to read:
-        - normal paragraphs
-        - tables
+    Supports:
 
-    If no text is found, falls back to reading
-    the DOCX XML directly.
+    1. Normal DOCX paragraphs
+    2. DOCX tables
+    3. Direct DOCX XML extraction
+    4. OCR of images embedded inside DOCX
+
+    The fourth method is important for scanned/image
+    resumes saved inside a DOCX file.
     """
 
-    # -----------------------------------------------------
-    # READ UPLOADED DOCX INTO MEMORY
-    # -----------------------------------------------------
-
     docx_bytes = file.read()
-
-    text = []
 
     # -----------------------------------------------------
     # FIRST METHOD: PYTHON-DOCX
     # -----------------------------------------------------
+
+    text = []
 
     try:
 
@@ -159,9 +151,7 @@ def extract_docx_text(file):
             BytesIO(docx_bytes)
         )
 
-        # -------------------------------------------------
-        # READ NORMAL PARAGRAPHS
-        # -------------------------------------------------
+        # Read paragraphs
 
         for paragraph in document.paragraphs:
 
@@ -173,9 +163,7 @@ def extract_docx_text(file):
                     paragraph_text
                 )
 
-        # -------------------------------------------------
-        # READ TABLES
-        # -------------------------------------------------
+        # Read tables
 
         for table in document.tables:
 
@@ -203,9 +191,7 @@ def extract_docx_text(file):
 
         text = []
 
-    # -----------------------------------------------------
-    # IF PYTHON-DOCX FOUND TEXT
-    # -----------------------------------------------------
+    # If normal DOCX text exists, return it
 
     if text:
 
@@ -225,23 +211,22 @@ def extract_docx_text(file):
                 "word/document.xml"
             )
 
+        from xml.etree import ElementTree as ET
+
         root = ET.fromstring(
             xml_data
         )
 
-        # Correct Microsoft Word XML namespace
         namespace = {
+
             "w": (
                 "http://schemas.openxmlformats.org/"
                 "wordprocessingml/2006/main"
             )
+
         }
 
         xml_text = []
-
-        # -------------------------------------------------
-        # READ EVERY PARAGRAPH FROM XML
-        # -------------------------------------------------
 
         for paragraph in root.findall(
             ".//w:p",
@@ -273,13 +258,84 @@ def extract_docx_text(file):
                         paragraph_text
                     )
 
-        return "\n".join(
-            xml_text
-        )
+        if xml_text:
+
+            return "\n".join(
+                xml_text
+            )
+
+    except Exception:
+
+        pass
+
+    # -----------------------------------------------------
+    # THIRD METHOD: OCR EMBEDDED DOCX IMAGES
+    # -----------------------------------------------------
+
+    if not tesseract_available():
+
+        return ""
+
+    ocr_text = []
+
+    try:
+
+        with zipfile.ZipFile(
+            BytesIO(docx_bytes)
+        ) as docx_zip:
+
+            media_files = [
+
+                name
+
+                for name in docx_zip.namelist()
+
+                if name.startswith(
+                    "word/media/"
+                )
+
+            ]
+
+            for media_file in media_files:
+
+                try:
+
+                    image_bytes = (
+                        docx_zip.read(
+                            media_file
+                        )
+                    )
+
+                    image = Image.open(
+                        BytesIO(image_bytes)
+                    ).convert("RGB")
+
+                    image_text = (
+                        pytesseract.image_to_string(
+                            image
+                        )
+                    )
+
+                    if (
+                        image_text
+                        and image_text.strip()
+                    ):
+
+                        ocr_text.append(
+                            image_text
+                        )
+
+                except Exception:
+
+                    continue
 
     except Exception:
 
         return ""
+
+    return "\n".join(
+        ocr_text
+    )
 
 
 # =========================================================
@@ -289,38 +345,29 @@ def extract_docx_text(file):
 def extract_resume_text(file):
 
     """
-    Detect the resume file type and extract its text.
+    Detect resume file type and extract its text.
 
     Supported formats:
-        PDF
-        DOCX
+
+    PDF
+    DOCX
     """
 
     file_name = file.name.lower()
 
-    # -----------------------------------------------------
     # PDF
-    # -----------------------------------------------------
 
     if file_name.endswith(".pdf"):
 
         return extract_pdf_text(file)
 
-    # -----------------------------------------------------
     # DOCX
-    # -----------------------------------------------------
 
-    elif file_name.endswith(".docx"):
+    if file_name.endswith(".docx"):
 
         return extract_docx_text(file)
 
-    # -----------------------------------------------------
-    # UNSUPPORTED FILE
-    # -----------------------------------------------------
-
-    else:
-
-        raise ValueError(
-            "Unsupported file format. "
-            "Please upload a PDF or DOCX resume."
-        )
+    raise ValueError(
+        "Unsupported file format. "
+        "Please upload a PDF or DOCX resume."
+    )

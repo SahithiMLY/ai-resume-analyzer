@@ -1,32 +1,54 @@
 from resume_parser import extract_resume_text
 
 
-pdf_path = "sample_resume.pdf"
+class UploadedFile:
+
+    def __init__(self, file_object, name):
+
+        self.file_object = file_object
+        self.name = name
+
+    def read(self):
+
+        return self.file_object.read()
 
 
-# Open the PDF in binary mode
-with open(pdf_path, "rb") as file:
+def test_file(file_path):
 
-    # Create a simple file-like object with a name
-    class UploadedFile:
-        def __init__(self, file_object, name):
-            self.file_object = file_object
-            self.name = name
+    print("\n==============================")
+    print(f"TESTING: {file_path}")
+    print("==============================")
 
-        def read(self):
-            return self.file_object.read()
+    with open(file_path, "rb") as file:
 
-    uploaded_file = UploadedFile(file, pdf_path)
+        uploaded_file = UploadedFile(
+            file,
+            file_path
+        )
 
-    # Extract text
-    text = extract_resume_text(uploaded_file)
+        text = extract_resume_text(
+            uploaded_file
+        )
+
+    print(
+        "Characters extracted:",
+        len(text)
+    )
+
+    print("\nFirst 1000 characters:")
+    print(text[:1000])
+
+    if text.strip():
+
+        print("\n✅ EXTRACTION SUCCESS")
+
+    else:
+
+        print("\n❌ EXTRACTION FAILED")
 
 
-print("\n==============================")
-print("RESUME TEXT EXTRACTED")
-print("==============================")
+# Test PDF
+test_file("sample_resume.pdf")
 
-print("Characters extracted:", len(text))
-
-print("\nFirst 2000 characters:")
-print(text[:2000])
+# Test DOCX
+test_file("sample_resume.docx")
